@@ -255,14 +255,11 @@ class TableData {
 		$scorm_scores  = array();
 		$scorm_results = $wpdb->get_results(
 			$wpdb->prepare(
-				"SELECT user_id, lesson_id,
-					COALESCE(
-						MAX( CASE WHEN verb NOT IN ('answered') THEN result END ),
-						MAX( result )
-					) as best_score
+				"SELECT user_id, lesson_id, MAX(result) as best_score
 				FROM {$wpdb->prefix}uotincan_reporting
 				WHERE course_id = %d
 				AND result IS NOT NULL
+				AND verb != 'answered'
 				GROUP BY user_id, lesson_id",
 				$course_id
 			)
@@ -481,14 +478,11 @@ private static function get_avergae_quiz_result( $course_id, $user_activities, $
 			global $wpdb;
 			$scorm_results = $wpdb->get_results(
 				$wpdb->prepare(
-					"SELECT lesson_id,
-						COALESCE(
-							MAX( CASE WHEN verb NOT IN ('answered') THEN result END ),
-							MAX( result )
-						) as best_score
+					"SELECT lesson_id, MAX(result) as best_score
 					FROM {$wpdb->prefix}uotincan_reporting
 					WHERE course_id = %d AND user_id = %d
 					AND result IS NOT NULL
+					AND verb != 'answered'
 					GROUP BY lesson_id",
 					$course_id,
 					$user_id
