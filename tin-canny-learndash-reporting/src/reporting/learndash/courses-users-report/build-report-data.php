@@ -741,17 +741,15 @@ class BuildReportData {
 public static function get_course_quiz_average( $course_id, $user_activities, $user_ids ) {
 
 	global $wpdb;
+	
+	$quiz_scores = array();
 
 	// Step 1: LearnDash - per-user best score per quiz
 	$ld_scores = array(); // [user_id => [post_id => best_score]]
 
 	foreach ( $user_activities as $activity ) {
-		if ( isset( $user_ids[ (int) $activity->user_id ] )
-			&& (int) $course_id === (int) $activity->course_id
-			&& $activity->activity_percentage !== null ) {
 
-			$uid     = (int) $activity->user_id;
-			$post_id = (int) $activity->post_id;
+		if ( isset( $user_ids[ (int) $activity->user_id ] ) && (int) $course_id === (int) $activity->course_id && $activity->activity_percentage !== null ) {
 
 			if ( ! isset( $ld_scores[ $uid ] ) ) {
 				$ld_scores[ $uid ] = array();
@@ -761,6 +759,7 @@ public static function get_course_quiz_average( $course_id, $user_activities, $u
 				|| $ld_scores[ $uid ][ $post_id ] < (float) $activity->activity_percentage ) {
 				$ld_scores[ $uid ][ $post_id ] = (float) $activity->activity_percentage;
 			}
+
 		}
 	}
 
@@ -769,12 +768,21 @@ public static function get_course_quiz_average( $course_id, $user_activities, $u
 	if ( ! empty( $user_ids ) ) {
 		$uid_list     = array_keys( $user_ids );
 		$placeholders = implode( ',', array_fill( 0, count( $uid_list ), '%d' ) );
+	// PARTIE 2 : Quiz SCORM (CODE AJOUTÉ)
+	// Récupérer les scores SCORM pour ce parcours
+	$user_ids_keys = array_keys( $user_ids );
+
+	if ( ! empty( $user_ids_keys ) ) {
+		$user_id_placeholders = implode( ',', array_fill( 0, count( $user_ids_keys ), '%d' ) );
+
 		$scorm_results = $wpdb->get_results(
 			$wpdb->prepare(
 				"SELECT user_id, lesson_id, MAX(result) as best_score
 				FROM {$wpdb->prefix}uotincan_reporting
 				WHERE course_id = %d
 				AND user_id IN ($placeholders)
+				AND user_id IN ($user_id_placeholders)
+				AND verb IN ('failed', 'passed', 'completed')
 				AND result IS NOT NULL
 				GROUP BY user_id, lesson_id",
 				array_merge( array( $course_id ), $uid_list )
@@ -819,6 +827,16 @@ public static function get_course_quiz_average( $course_id, $user_activities, $u
 	// Step 4: Global average = average of per-user averages
 	if ( count( $user_averages ) > 0 ) {
 		$average = absint( array_sum( $user_averages ) / count( $user_averages ) );
+
+		// Ajouter les scores SCORM au tableau
+		foreach ( $scorm_results as $scorm ) {
+			$key = 'scorm_' . $scorm->user_id;
+			$quiz_scores[ $key ] = round( $scorm->avg_score, 2 );
+		}
+	}
+
+	if ( count( $quiz_scores ) > 0 ) {
+		$average = absint( array_sum( $quiz_scores ) / count( $quiz_scores ) );
 	} else {
 		$average = 'false';
 	}
