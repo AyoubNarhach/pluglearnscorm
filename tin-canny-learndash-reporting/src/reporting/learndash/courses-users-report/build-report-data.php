@@ -677,42 +677,43 @@ class BuildReportData {
 	        )
 	    );
 
-	    if (empty($quiz_activities)) {
-	        self::$course_quiz_average = [];
-	        Cache::create(__FUNCTION__, []);
-	        return;
-	    }
+	    // Ne pas retourner prématurément si $quiz_activities est vide :
+	    // les scores SCORM doivent être calculés même sans quiz LearnDash.
 
 	    /**
-	     * Step 3: Get percentages for these activity IDs
+	     * Step 3: Get percentages for LearnDash quiz activity IDs (skipped if none)
 	     */
-	    $activity_ids = wp_list_pluck($quiz_activities, 'activity_id');
-	    $activity_placeholders = implode(',', array_fill(0, count($activity_ids), '%d'));
+	    $activity_meta = array();
 
-	    $activity_meta = $wpdb->get_results(
-	        $wpdb->prepare(
-	            "
-	            SELECT activity_id, activity_meta_value AS percentage
-	            FROM {$tbl_activity_meta}
-	            WHERE activity_meta_key = 'percentage'
-	              AND activity_id IN ($activity_placeholders)
-	            ",
-	            $activity_ids
-	        ),
-	        OBJECT_K
-	    );
+	    if ( ! empty( $quiz_activities ) ) {
+	        $activity_ids          = wp_list_pluck( $quiz_activities, 'activity_id' );
+	        $activity_placeholders = implode( ',', array_fill( 0, count( $activity_ids ), '%d' ) );
 
-	    /**
-	     * Step 4: Merge data in PHP
-	     */
-	    foreach ($quiz_activities as &$act) {
-	        if (isset($activity_meta[$act->activity_id])) {
-	            $act->activity_percentage = $activity_meta[$act->activity_id]->percentage;
-	        } else {
-	            $act->activity_percentage = null;
+	        $activity_meta = $wpdb->get_results(
+	            $wpdb->prepare(
+	                "
+	                SELECT activity_id, activity_meta_value AS percentage
+	                FROM {$tbl_activity_meta}
+	                WHERE activity_meta_key = 'percentage'
+	                  AND activity_id IN ($activity_placeholders)
+	                ",
+	                $activity_ids
+	            ),
+	            OBJECT_K
+	        );
+
+	        /**
+	         * Step 4: Merge percentage data into quiz activities
+	         */
+	        foreach ( $quiz_activities as &$act ) {
+	            if ( isset( $activity_meta[ $act->activity_id ] ) ) {
+	                $act->activity_percentage = $activity_meta[ $act->activity_id ]->percentage;
+	            } else {
+	                $act->activity_percentage = null;
+	            }
 	        }
+	        unset( $act );
 	    }
-	    unset($act);
 
 	    /**
 	     * Step 5: Calculate averages per course
@@ -759,22 +760,24 @@ public static function get_course_quiz_average( $course_id, $user_activities, $u
 
 	// PARTIE 2 : Quiz SCORM (CODE AJOUTÉ)
 	// Récupérer les scores SCORM pour ce parcours
-	$user_ids_list = implode(',', array_keys($user_ids));
-	
-	if (!empty($user_ids_list)) {
+	$user_ids_keys = array_keys( $user_ids );
+
+	if ( ! empty( $user_ids_keys ) ) {
+		$user_id_placeholders = implode( ',', array_fill( 0, count( $user_ids_keys ), '%d' ) );
+
 		$scorm_results = $wpdb->get_results(
 			$wpdb->prepare(
 				"SELECT user_id, AVG(result) as avg_score
 				FROM {$wpdb->prefix}uotincan_reporting
 				WHERE course_id = %d
-				AND user_id IN ($user_ids_list)
+				AND user_id IN ($user_id_placeholders)
 				AND verb IN ('failed', 'passed', 'completed')
 				AND result IS NOT NULL
 				GROUP BY user_id",
-				$course_id
+				array_merge( array( $course_id ), $user_ids_keys )
 			)
 		);
-		
+
 		// Ajouter les scores SCORM au tableau
 		foreach ( $scorm_results as $scorm ) {
 			$key = 'scorm_' . $scorm->user_id;
