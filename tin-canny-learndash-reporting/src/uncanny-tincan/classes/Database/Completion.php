@@ -124,7 +124,7 @@ class Completion extends \UCTINCAN\Database {
 					`user_id` = %s AND
 					`module` LIKE '%%%s%%' AND
 					%s
-					( `completion` = 1 OR `verb` = 'answered' OR `verb` = 'completed' OR `verb` = 'passed' OR `verb` = 'failed' )
+					( `verb` = 'answered' OR `verb` = 'completed' OR `verb` = 'passed' OR `verb` = 'failed' )
 			LIMIT 1
 			",
 			$wpdb->prefix,

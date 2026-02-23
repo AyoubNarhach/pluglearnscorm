@@ -261,7 +261,7 @@ class TableData {
 				"SELECT user_id, AVG(result) as avg_score
 				FROM {$wpdb->prefix}uotincan_reporting
 				WHERE course_id = %d
-				AND ( verb IN ('failed', 'passed', 'completed') OR completion = 1 )
+				AND verb IN ('failed', 'passed', 'completed')
 				AND result IS NOT NULL
 				GROUP BY user_id",
 				$course_id
@@ -470,9 +470,18 @@ private static function get_avergae_quiz_result( $course_id, $user_activities, $
 		}
 
 		// PARTIE 2 : Quiz SCORM (CODE AJOUTÉ)
-		// Utiliser le $user_id passé en paramètre (ne pas l'écraser)
-
-		// Si on a un user_id, récupérer ses scores SCORM pour ce parcours
+		// Récupérer le user_id depuis $user_activities (première activité)
+		$user_id = null;
+		if (!empty($user_activities)) {
+			foreach ($user_activities as $activity) {
+				if (isset($activity->user_id)) {
+					$user_id = $activity->user_id;
+					break;
+				}
+			}
+		}
+		
+		// Si on a trouvé un user_id, récupérer ses scores SCORM pour ce parcours
 		if ($user_id) {
 			$scorm_results = $wpdb->get_results(
 				$wpdb->prepare(
@@ -480,7 +489,7 @@ private static function get_avergae_quiz_result( $course_id, $user_activities, $
 					FROM {$wpdb->prefix}uotincan_reporting
 					WHERE course_id = %d
 					AND user_id = %d
-					AND ( verb IN ('failed', 'passed', 'completed') OR completion = 1 )
+					AND verb IN ('failed', 'passed', 'completed')
 					AND result IS NOT NULL",
 					$course_id,
 					$user_id
@@ -835,7 +844,7 @@ private static function get_avergae_quiz_result( $course_id, $user_activities, $
 		}
 
 		// Column Quiz Average
-		$course_quiz_average = self::get_avergae_quiz_result( $course_id, $user_activities, $user_id );
+		$course_quiz_average = self::get_avergae_quiz_result( $course_id, $user_activities );
 		$avg_score           = '';
 		if ( $course_quiz_average ) {
 			/* Translators: 1. number percentage */
