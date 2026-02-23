@@ -251,50 +251,44 @@ class TableData {
 			}
 		}
 
-		// Step 2: SCORM - best score per user per module (lesson_id)
-		$scorm_scores  = array();
+		// ============================================
+		// PARTIE 2 : QUIZ SCORM (CODE AJOUTÉ)
+		// ============================================
+		
+		// Récupérer les scores SCORM depuis TinCan
 		$scorm_results = $wpdb->get_results(
 			$wpdb->prepare(
-				"SELECT user_id, lesson_id, MAX(result) as best_score
+				"SELECT user_id, AVG(result) as avg_score
 				FROM {$wpdb->prefix}uotincan_reporting
 				WHERE course_id = %d
 				AND verb IN ('failed', 'passed', 'completed')
 				AND result IS NOT NULL
-				GROUP BY user_id, lesson_id",
+				GROUP BY user_id",
 				$course_id
 			)
 		);
+		
+		// Ajouter les scores SCORM aux quiz_scores
 		foreach ( $scorm_results as $scorm ) {
-			$uid       = (int) $scorm->user_id;
-			$lesson_id = (int) $scorm->lesson_id;
-			if ( ! isset( $user_ids_rearranged[ $uid ] ) ) {
-				continue;
+			if ( isset( $user_ids_rearranged[ (int) $scorm->user_id ] ) ) {
+				
+				if ( ! isset( $quiz_scores[ $scorm->user_id ] ) ) {
+					$quiz_scores[ $scorm->user_id ] = array();
+				}
+				
+				// Ajouter le score SCORM comme un "quiz" supplémentaire
+				// Utiliser un ID négatif pour éviter les conflits avec les quiz LearnDash
+				$quiz_scores[ $scorm->user_id ][ 'scorm_avg' ] = round( $scorm->avg_score, 2 );
 			}
-			if ( ! isset( $scorm_scores[ $uid ] ) ) {
-				$scorm_scores[ $uid ] = array();
-			}
-			$scorm_scores[ $uid ][ $lesson_id ] = (float) $scorm->best_score;
 		}
 
-		// Step 3: Per-user combined average
-		// Logic: LD only → LD avg; SCORM only → SCORM avg; both → avg(LD avg, SCORM avg)
-		$averages     = array();
-		$all_user_ids = array_unique( array_merge( array_keys( $quiz_scores ), array_keys( $scorm_scores ) ) );
-		foreach ( $all_user_ids as $uid ) {
-			$ld_avg    = null;
-			$scorm_avg = null;
-			if ( ! empty( $quiz_scores[ $uid ] ) ) {
-				$ld_avg = array_sum( $quiz_scores[ $uid ] ) / count( $quiz_scores[ $uid ] );
-			}
-			if ( ! empty( $scorm_scores[ $uid ] ) ) {
-				$scorm_avg = array_sum( $scorm_scores[ $uid ] ) / count( $scorm_scores[ $uid ] );
-			}
-			if ( null !== $ld_avg && null !== $scorm_avg ) {
-				$averages[ $uid ] = absint( ( $ld_avg + $scorm_avg ) / 2 );
-			} elseif ( null !== $ld_avg ) {
-				$averages[ $uid ] = absint( $ld_avg );
-			} elseif ( null !== $scorm_avg ) {
-				$averages[ $uid ] = absint( $scorm_avg );
+		// ============================================
+		// PARTIE 3 : CALCUL DE LA MOYENNE (CODE ORIGINAL)
+		// ============================================
+		$averages = array();
+		if ( 0 !== count( $quiz_scores ) ) {
+			foreach ( $quiz_scores as $user_id => $scores ) {
+				$averages[ $user_id ] = absint( array_sum( $scores ) / count( $scores ) );
 			}
 		}
 
@@ -456,26 +450,25 @@ $course_quiz_average = self::get_avergae_quiz_result( $course_id, $user_activiti
 	 */
 private static function get_avergae_quiz_result( $course_id, $user_activities, $user_id = null ) {
 
-		// Step 1: LearnDash best score per quiz
-		$ld_scores = array();
+		global $wpdb;
+		
+		$quiz_scores = array();
 
+		// PARTIE 1 : Quiz LearnDash (CODE ORIGINAL)
 		foreach ( $user_activities as $activity ) {
 
 			if ( (int) $course_id === (int) $activity->course_id ) {
 
-				$post_id = (int) $activity->post_id;
-				if ( ! isset( $ld_scores[ $post_id ] ) ) {
-					$ld_scores[ $post_id ] = (float) $activity->activity_percentage;
-				} elseif ( $ld_scores[ $post_id ] < (float) $activity->activity_percentage ) {
-					$ld_scores[ $post_id ] = (float) $activity->activity_percentage;
+				if ( ! isset( $quiz_scores[ $activity->post_id ] ) ) {
+
+					$quiz_scores[ $activity->post_id ] = $activity->activity_percentage;
+				} elseif ( $quiz_scores[ $activity->post_id ] < $activity->activity_percentage ) {
+
+					$quiz_scores[ $activity->post_id ] = $activity->activity_percentage;
 				}
 			}
 		}
 
-		// Step 2: SCORM best score per module (only when user_id is provided)
-		$scorm_avg = null;
-		if ( null !== $user_id ) {
-			global $wpdb;
 		// PARTIE 2 : Quiz SCORM (CODE AJOUTÉ)
 		// Récupérer le user_id depuis $user_activities (première activité)
 		$user_id = null;
@@ -492,11 +485,8 @@ private static function get_avergae_quiz_result( $course_id, $user_activities, $
 		if ($user_id) {
 			$scorm_results = $wpdb->get_results(
 				$wpdb->prepare(
-					"SELECT lesson_id, MAX(result) as best_score
+					"SELECT AVG(result) as avg_score
 					FROM {$wpdb->prefix}uotincan_reporting
-					WHERE course_id = %d AND user_id = %d
-					AND result IS NOT NULL
-					GROUP BY lesson_id",
 					WHERE course_id = %d
 					AND user_id = %d
 					AND verb IN ('failed', 'passed', 'completed')
@@ -505,31 +495,20 @@ private static function get_avergae_quiz_result( $course_id, $user_activities, $
 					$user_id
 				)
 			);
-			if ( ! empty( $scorm_results ) ) {
-				$scorm_module_scores = array();
-				foreach ( $scorm_results as $row ) {
-					$scorm_module_scores[] = (float) $row->best_score;
-				}
-				$scorm_avg = array_sum( $scorm_module_scores ) / count( $scorm_module_scores );
+			
+			if (!empty($scorm_results) && $scorm_results[0]->avg_score > 0) {
+				// Ajouter le score SCORM comme un "quiz" supplémentaire
+				$quiz_scores['scorm_avg'] = round($scorm_results[0]->avg_score, 2);
 			}
 		}
 
-		// Step 3: Compute LD avg
-		$ld_avg = null;
-		if ( ! empty( $ld_scores ) ) {
-			$ld_avg = array_sum( $ld_scores ) / count( $ld_scores );
+		if ( 0 !== count( $quiz_scores ) ) {
+			$average = absint( array_sum( $quiz_scores ) / count( $quiz_scores ) );
+		} else {
+			$average = false;
 		}
 
-		// Step 4: Hybrid logic — LD only, SCORM only, or average of both
-		if ( null !== $ld_avg && null !== $scorm_avg ) {
-			return absint( ( $ld_avg + $scorm_avg ) / 2 );
-		} elseif ( null !== $ld_avg ) {
-			return absint( $ld_avg );
-		} elseif ( null !== $scorm_avg ) {
-			return absint( $scorm_avg );
-		} else {
-			return false;
-		}
+		return $average;
 	}
 
 	/**
