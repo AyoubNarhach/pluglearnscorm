@@ -375,6 +375,11 @@ abstract class TinCanRequest {
 			$completion = 1;
 		}
 
+		// Verb-based completion: "passed" and "completed" verbs imply completion
+		if ( in_array( strtolower( $verb ), array( 'passed', 'completed' ), true ) ) {
+			$completion = 1;
+		}
+
 		if ( ! $verb ) {
 			return;
 		}
