@@ -139,7 +139,7 @@ class Scorm extends \TINCANNYSNC\FileSystem\absModule {
 					TC_RECORD_STORES = [
 					];
 				</script>
-				<script src="<?php echo $scorm_driver_js_url."?sv=2004&v=".UNCANNY_REPORTING_VERSION; ?>" type="text/javascript"></script>
+				<script src="<?php echo $scorm_driver_js_url."?sv=2004&v=".UNCANNY_REPORTING_VERSION."&r=".filemtime(plugin_dir_path(UO_REPORTING_FILE).'src/assets/dist/scripts/scormdriver.js'); ?>" type="text/javascript"></script>
 			<?php } else { ?>
 				<script type="text/javascript">
 					var TC_COURSE_ID, TC_COURSE_NAME, TC_COURSE_DESC, TC_RECORD_STORES;
@@ -156,7 +156,7 @@ class Scorm extends \TINCANNYSNC\FileSystem\absModule {
 					];
 
 				</script>
-				<script src="<?php echo $scorm_driver_js_url."?sv=1.2&v=".UNCANNY_REPORTING_VERSION; ?>" type="text/javascript"></script>
+				<script src="<?php echo $scorm_driver_js_url."?sv=1.2&v=".UNCANNY_REPORTING_VERSION."&r=".filemtime(plugin_dir_path(UO_REPORTING_FILE).'src/assets/dist/scripts/scormdriver.js'); ?>" type="text/javascript"></script>
 			<?php } ?>
 		</head>
 			<body>

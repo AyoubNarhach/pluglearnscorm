@@ -380,6 +380,28 @@ abstract class TinCanRequest {
 			$completion = 1;
 		}
 
+		// EdApp / SCORM 1.2 fallback: when "terminated" arrives without completion info,
+		// check if a prior "scored" event exists for this user/lesson/course.
+		// If so, the learner previously received a score (meaning the module ran to completion)
+		// and we infer completion = 1 so the record is not silently ignored.
+		if ( 'terminated' === strtolower( $verb ) && false === $completion && $lesson_id > 0 ) {
+			global $wpdb;
+			$prior_scored = $wpdb->get_var(
+				$wpdb->prepare(
+					"SELECT 1 FROM {$wpdb->prefix}uotincan_reporting
+					 WHERE user_id = %d AND lesson_id = %d AND course_id = %d
+					   AND verb = 'scored'
+					 LIMIT 1",
+					(int) $user_id,
+					(int) $lesson_id,
+					(int) $course_id
+				)
+			);
+			if ( $prior_scored ) {
+				$completion = 1;
+			}
+		}
+
 		if ( ! $verb ) {
 			return;
 		}
