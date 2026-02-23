@@ -61,9 +61,39 @@ class Init {
 	public function __construct() {
 		add_action( 'rest_api_init', array( $this, 'reporting_api' ) );
 
+		$this->prevent_basic_auth_401_for_tincan();
 		$this->set_objects();
 		$this->create_hooks();
 		$this->purge_user_records();
+	}
+
+	/**
+	 * Prevent WordPress Application Passwords from returning 401 for xAPI requests
+	 * to the ucTinCan endpoint. External SCORM tools (e.g. EdApp) send
+	 * Authorization: Basic headers as per the xAPI spec, but these should not
+	 * be processed as WordPress credentials.
+	 *
+	 * @access private
+	 * @return void
+	 */
+	private function prevent_basic_auth_401_for_tincan() {
+		add_filter(
+			'determine_current_user',
+			function ( $user_id ) {
+				if ( empty( $_SERVER['REQUEST_URI'] ) ) {
+					return $user_id;
+				}
+				if ( strpos( $_SERVER['REQUEST_URI'], self::TINCAN_URL_KEY ) === false ) {
+					return $user_id;
+				}
+				// For ucTinCan xAPI endpoint, remove the WordPress Application
+				// Passwords filter (priority 20) so Basic Auth from xAPI clients
+				// (EdApp, etc.) does not trigger a 401 rejection.
+				remove_filter( 'determine_current_user', 'wp_authenticate_application_password', 20 );
+				return $user_id;
+			},
+			15
+		);
 	}
 
 	/**
