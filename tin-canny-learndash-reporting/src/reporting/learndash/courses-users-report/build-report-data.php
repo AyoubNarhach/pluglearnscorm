@@ -723,7 +723,7 @@ class BuildReportData {
 	        $course_quiz_average[$course_id] = self::get_course_quiz_average(
 	            $course_id,
 	            $quiz_activities,
-	            self::$all_user_ids_rearranged
+	            self::$course_access_list[ $course_id ]
 	        );
 	    }
 
