@@ -259,7 +259,7 @@ class TableData {
 				FROM {$wpdb->prefix}uotincan_reporting
 				WHERE course_id = %d
 				AND result IS NOT NULL
-				AND verb != 'answered'
+				AND verb IN ('passed', 'failed', 'scored', 'completed', 'terminated')
 				GROUP BY user_id, lesson_id",
 				$course_id
 			)
@@ -482,7 +482,7 @@ private static function get_avergae_quiz_result( $course_id, $user_activities, $
 					FROM {$wpdb->prefix}uotincan_reporting
 					WHERE course_id = %d AND user_id = %d
 					AND result IS NOT NULL
-					AND verb != 'answered'
+					AND verb IN ('passed', 'failed', 'scored', 'completed', 'terminated')
 					GROUP BY lesson_id",
 					$course_id,
 					$user_id
