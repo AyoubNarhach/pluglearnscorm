@@ -740,53 +740,86 @@ class BuildReportData {
 	 * @return int|string
 	 */
 public static function get_course_quiz_average( $course_id, $user_activities, $user_ids ) {
+
 	global $wpdb;
-	
-	$quiz_scores = array();
 
-	// PARTIE 1 : Quiz LearnDash (CODE ORIGINAL)
+	// Step 1: LearnDash - per-user best score per quiz
+	$ld_scores = array(); // [user_id => [post_id => best_score]]
+
 	foreach ( $user_activities as $activity ) {
+		if ( isset( $user_ids[ (int) $activity->user_id ] )
+			&& (int) $course_id === (int) $activity->course_id
+			&& $activity->activity_percentage !== null ) {
 
-		if ( isset( $user_ids[ (int) $activity->user_id ] ) && (int) $course_id === (int) $activity->course_id && $activity->activity_percentage !== null ) {
+			$uid     = (int) $activity->user_id;
+			$post_id = (int) $activity->post_id;
 
-			$key = $activity->post_id . $activity->user_id;
-
-			if ( ! isset( $quiz_scores[ $key ] ) || $quiz_scores[ $key ] < $activity->activity_percentage ) {
-				$quiz_scores[ $key ] = $activity->activity_percentage;
+			if ( ! isset( $ld_scores[ $uid ] ) ) {
+				$ld_scores[ $uid ] = array();
 			}
 
+			if ( ! isset( $ld_scores[ $uid ][ $post_id ] )
+				|| $ld_scores[ $uid ][ $post_id ] < (float) $activity->activity_percentage ) {
+				$ld_scores[ $uid ][ $post_id ] = (float) $activity->activity_percentage;
+			}
 		}
 	}
 
-	// PARTIE 2 : Quiz SCORM (CODE AJOUTÉ)
-	// Récupérer les scores SCORM pour ce parcours
-	$user_ids_keys = array_keys( $user_ids );
-
-	if ( ! empty( $user_ids_keys ) ) {
-		$user_id_placeholders = implode( ',', array_fill( 0, count( $user_ids_keys ), '%d' ) );
-
+	// Step 2: SCORM - per-user best score per module
+	$scorm_scores = array(); // [user_id => [lesson_id => best_score]]
+	if ( ! empty( $user_ids ) ) {
+		$uid_list     = array_keys( $user_ids );
+		$placeholders = implode( ',', array_fill( 0, count( $uid_list ), '%d' ) );
 		$scorm_results = $wpdb->get_results(
 			$wpdb->prepare(
-				"SELECT user_id, AVG(result) as avg_score
+				"SELECT user_id, lesson_id, MAX(result) as best_score
 				FROM {$wpdb->prefix}uotincan_reporting
 				WHERE course_id = %d
-				AND user_id IN ($user_id_placeholders)
-				AND verb IN ('failed', 'passed', 'completed')
+				AND user_id IN ($placeholders)
 				AND result IS NOT NULL
-				GROUP BY user_id",
-				array_merge( array( $course_id ), $user_ids_keys )
+				GROUP BY user_id, lesson_id",
+				array_merge( array( $course_id ), $uid_list )
 			)
 		);
-
-		// Ajouter les scores SCORM au tableau
-		foreach ( $scorm_results as $scorm ) {
-			$key = 'scorm_' . $scorm->user_id;
-			$quiz_scores[ $key ] = round( $scorm->avg_score, 2 );
+		foreach ( $scorm_results as $row ) {
+			$uid       = (int) $row->user_id;
+			$lesson_id = (int) $row->lesson_id;
+			if ( ! isset( $scorm_scores[ $uid ] ) ) {
+				$scorm_scores[ $uid ] = array();
+			}
+			$scorm_scores[ $uid ][ $lesson_id ] = (float) $row->best_score;
 		}
 	}
 
-	if ( count( $quiz_scores ) > 0 ) {
-		$average = absint( array_sum( $quiz_scores ) / count( $quiz_scores ) );
+	// Step 3: Per-user combined average
+	// Logic: LD only → LD avg; SCORM only → SCORM avg; both → avg(LD avg, SCORM avg)
+	$user_averages = array();
+	$all_user_ids  = array_unique( array_merge( array_keys( $ld_scores ), array_keys( $scorm_scores ) ) );
+
+	foreach ( $all_user_ids as $uid ) {
+		$ld_avg    = null;
+		$scorm_avg = null;
+
+		if ( ! empty( $ld_scores[ $uid ] ) ) {
+			$ld_avg = array_sum( $ld_scores[ $uid ] ) / count( $ld_scores[ $uid ] );
+		}
+
+		if ( ! empty( $scorm_scores[ $uid ] ) ) {
+			$scorm_avg = array_sum( $scorm_scores[ $uid ] ) / count( $scorm_scores[ $uid ] );
+		}
+
+		if ( null !== $ld_avg && null !== $scorm_avg ) {
+			$user_averages[] = ( $ld_avg + $scorm_avg ) / 2;
+		} elseif ( null !== $ld_avg ) {
+			$user_averages[] = $ld_avg;
+		} elseif ( null !== $scorm_avg ) {
+			$user_averages[] = $scorm_avg;
+		}
+	}
+
+	// Step 4: Global average = average of per-user averages
+	if ( count( $user_averages ) > 0 ) {
+		$average = absint( array_sum( $user_averages ) / count( $user_averages ) );
 	} else {
 		$average = 'false';
 	}
