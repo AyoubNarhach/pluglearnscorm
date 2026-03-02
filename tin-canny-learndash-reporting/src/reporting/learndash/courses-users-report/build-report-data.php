@@ -776,7 +776,7 @@ public static function get_course_quiz_average( $course_id, $user_activities, $u
 				WHERE course_id = %d
 				AND user_id IN ($placeholders)
 				AND result IS NOT NULL
-				AND verb IN ('passed', 'failed', 'scored', 'completed')
+				AND verb IN ('passed', 'failed', 'scored', 'completed', 'terminated')
 				GROUP BY user_id, lesson_id",
 				array_merge( array( $course_id ), $uid_list )
 			)
