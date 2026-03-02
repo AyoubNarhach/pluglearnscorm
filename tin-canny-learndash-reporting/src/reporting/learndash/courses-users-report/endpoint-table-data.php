@@ -260,7 +260,8 @@ class TableData {
 				WHERE course_id = %d
 				AND result IS NOT NULL
 				AND verb IN ('passed', 'failed', 'scored', 'completed', 'terminated')
-				GROUP BY user_id, lesson_id",
+				GROUP BY user_id, lesson_id
+				HAVING MAX(result) > 1",
 				$course_id
 			)
 		);
@@ -483,7 +484,8 @@ private static function get_avergae_quiz_result( $course_id, $user_activities, $
 					WHERE course_id = %d AND user_id = %d
 					AND result IS NOT NULL
 					AND verb IN ('passed', 'failed', 'scored', 'completed', 'terminated')
-					GROUP BY lesson_id",
+					GROUP BY lesson_id
+					HAVING MAX(result) > 1",
 					$course_id,
 					$user_id
 				)
